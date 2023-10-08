@@ -1,0 +1,93 @@
+# config file version
+apiVersion: 1
+
+# list of datasources that should be deleted from the database
+deleteDatasources:
+  - name: Prometheus
+    orgId: 1
+
+# list of datasources to insert/update depending
+# what's available in the database
+datasources:
+  # <string, required> name of the datasource. Required
+  - uid: prometheus
+    orgId: 1
+    name: Prometheus
+    type: prometheus
+    typeName: Prometheus
+    access: proxy
+    url: http://prometheus:9090
+    password: ''
+    user: ''
+    database: ''
+    basicAuth: false
+    isDefault: true
+    jsonData:
+      exemplarTraceIdDestinations:
+        - datasourceUid: tempo
+          name: TraceID
+      httpMethod: POST
+    readOnly: false
+    editable: true
+  - uid: tempo
+    orgId: 1
+    name: Tempo
+    type: tempo
+    typeName: Tempo
+    access: proxy
+    url: http://tempo
+    password: ''
+    user: ''
+    database: ''
+    basicAuth: false
+    isDefault: false
+    jsonData:
+      nodeGraph:
+        enabled: true
+      search:
+        hide: false
+      lokiSearch:
+        datasourceUid: loki
+      tracesToLogs:
+        datasourceUid: loki
+        spanStartTimeShift: '1m'
+        spanEndTimeShift: '-1m'
+        filterBySpanID: false
+        filterByTraceID: true
+        mapTagNamesEnabled: false
+        tags:
+          - compose_service
+      tracesToMetrics:
+        datasourceUid: prometheus
+        spanStartTimeShift: '5m'
+        spanEndTimeShift: '-5m'
+        tags: [{ key: 'service.name', value: 'app_name' }]
+        queries:
+          - name: 'Go to Metrics: Total Requests'
+            query: 'sum(fastapi_requests_total{$$__tags, path!="/metrics"})'
+          - name: 'Go to Metrics: Requests Average Duration'
+            query: 'fastapi_requests_duration_seconds_sum{$$__tags} / fastapi_requests_duration_seconds_count{$$__tags}'
+          - name: 'Go to Metrics: 99 Percentile'
+            query: 'histogram_quantile(.99,sum(rate(fastapi_requests_duration_seconds_bucket{$$__tags, path!="/metrics"}[1m])) by(path, le))'
+    readOnly: false
+    editable: true
+  - uid: loki
+    orgId: 1
+    name: Loki
+    type: loki
+    typeName: Loki
+    access: proxy
+    url: http://loki:3100
+    password: ''
+    user: ''
+    database: ''
+    basicAuth: false
+    isDefault: false
+    jsonData:
+      derivedFields:
+        - datasourceUid: tempo
+          matcherRegex: (?:trace_id)=(\w+)
+          name: TraceID
+          url: $${__value.raw}
+    readOnly: false
+    editable: true
